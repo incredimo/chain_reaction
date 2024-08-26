@@ -128,8 +128,3 @@ ChainReaction offers a powerful combination of ease of use, error resilience, pe
 
 Whether you're building data processing pipelines, complex business workflows, or real-time event processing systems, **ChainReaction** provides the tools you need to create efficient, maintainable, and robust systems.
 
-## Conclusion
-
-ChainReaction is more than just a utility library; it’s a framework that empowers you to build robust, efficient, and maintainable systems with ease. Whether you’re working on small scripts or large-scale applications, ChainReaction provides the tools you need to succeed.
-
-Explore the full capabilities of ChainReaction by diving into the [documentation](https://docs.rs/chain_reaction) and contribute or report issues on [GitHub](https://github.com/incredimo/chain_reaction). Happy coding! 🚀
