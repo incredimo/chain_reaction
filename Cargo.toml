@@ -1,0 +1,39 @@
+[package]
+name = "chain_reaction"
+version = "0.2.44"
+edition = "2021"
+authors = ["incredimo <a@xo.rs>"]
+description = "simple beautiful timed function chaining"
+license = "MIT"
+repository = "https://github.com/incredimo/chain_reaction"
+
+
+
+
+
+[dependencies]
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
