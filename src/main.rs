@@ -1,4 +1,4 @@
-use ex::*;
+use chain_reaction::*;
 
 pub fn main() {
     // Example 1: Basic chaining with timing
