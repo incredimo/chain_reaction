@@ -48,7 +48,7 @@ if ($local) {
     Write-Output "🎉 Pushing changes and tags to the repository..."
     git push && git push --tags
 
-    $cargoToken = $env:CARGO_TOKEN
+    $cargoToken = $env:CARGO_REGISTRY_TOKEN
     if ($cargoToken) {
         Write-Output "📦 Publishing package to crates.io..."
         cargo publish
@@ -58,7 +58,7 @@ if ($local) {
             Write-Output "❌ Failed to publish package to crates.io. Check output for details."
         }
     } else {
-        Write-Output "⚠️ CARGO_TOKEN not found in environment variables. Skipping publishing to crates.io."
+        Write-Output "⚠️ CARGO_REGISTRY_TOKEN not found in environment variables. Skipping publishing to crates.io."
     }
 }
 
