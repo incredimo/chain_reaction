@@ -4,4 +4,4 @@ version = 3
 
 [[package]]
 name = "chain_reaction"
-version = "0.2.47"
+version = "0.2.48"

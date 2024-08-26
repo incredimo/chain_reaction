@@ -48,17 +48,17 @@ if ($local) {
     Write-Output "🎉 Pushing changes and tags to the repository..."
     git push && git push --tags
 
-    $cargoToken = $env:CARGO_REGISTRY_TOKEN
-    if ($cargoToken) {
-        Write-Output "📦 Publishing package to crates.io..."
+    # Try to publish to crates.io and handle failure
+    try {
+        Write-Output "📦 Attempting to publish package to crates.io..."
         cargo publish
         if ($LASTEXITCODE -eq 0) {
             Write-Output "✨ Package successfully published to crates.io!"
         } else {
-            Write-Output "❌ Failed to publish package to crates.io. Check output for details."
+            throw "Publishing failed."
         }
-    } else {
-        Write-Output "⚠️ CARGO_REGISTRY_TOKEN not found in environment variables. Skipping publishing to crates.io."
+    } catch {
+        Write-Output "⚠️ Couldn't publish to crates.io. Please check the error above."
     }
 }
 
