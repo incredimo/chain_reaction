@@ -1,33 +1,27 @@
-//! # chain_reaction
-//! 
-//! This library provides a flexible and composable way to build data processing pipelines.
-//! It includes the `Reactor` and `TimedReactor` structs for building and executing these pipelines,
-//! along with various traits and helper functions.
-
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::time::{Duration, Instant};
-use std::collections::HashMap;
-use std::rc::Rc;
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::{Debug, Display};
+use std::marker::PhantomData;
 use std::mem;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
-/// A type alias for the Result type used throughout the library.
-/// `O` is the output type, and `E` is the error type (defaulting to `Failure`).
 pub type Out<O, E = Failure> = Result<O, E>;
 
-/// The `Act` trait defines the core behavior for all actions in the Reactor pipeline.
 pub trait Act<I, O, E = Failure> {
-    /// Performs the action on the input and returns the result.
     fn act(&self, input: I) -> Out<O, E>;
+    fn run(&self, input: I) -> O {
+        match self.act(input) {
+            Ok(output) => output,
+            Err(e) => panic!("Error: "),
+        }
+    }
 }
 
-/// The `ChainableAct` trait extends `Act` with the ability to chain actions together.
-pub trait ChainableAct<I, O, E = Failure>: Act<I, O, E> 
+pub trait ChainableAct<I, O, E = Failure>: Act<I, O, E>
 where
     Self: Sized,
 {
-    /// Chains this action with another, creating a new `Chain` action.
     fn then<O2, T>(self, transform: T) -> Chain<Self, T, I, O, O2, E>
     where
         T: Act<O, O2, E>,
@@ -40,9 +34,8 @@ where
     }
 }
 
-/// The `Chain` struct represents a sequence of two actions.
-pub struct Chain<A, B, I, O1, O2, E> 
-where 
+pub struct Chain<A, B, I, O1, O2, E>
+where
     A: Act<I, O1, E>,
     B: Act<O1, O2, E>,
 {
@@ -61,13 +54,8 @@ where
     }
 }
 
-/// Implement `ChainableAct` for all types that implement `Act`.
-impl<I, O, E, F> ChainableAct<I, O, E> for F
-where
-    F: Act<I, O, E>,
-{}
+impl<I, O, E, F> ChainableAct<I, O, E> for F where F: Act<I, O, E> {}
 
-/// Implement `Act` for all functions that take an input and return an `Out`.
 impl<I, O, E, F> Act<I, O, E> for F
 where
     F: Fn(I) -> Out<O, E>,
@@ -77,19 +65,16 @@ where
     }
 }
 
-/// An enum representing either a left or right value.
 #[derive(Debug)]
 pub enum Either<L, R> {
     Left(L),
     Right(R),
 }
 
-/// The `Reactor` struct represents a data processing pipeline.
 pub struct Reactor<I, E = Failure> {
     input: Out<I, E>,
 }
 
-/// The `TimedReactor` struct extends `Reactor` with timing capabilities.
 pub struct TimedReactor<I, E = Failure> {
     reactor: Rc<RefCell<Reactor<I, E>>>,
     timings: Rc<RefCell<HashMap<String, Duration>>>,
@@ -101,15 +86,13 @@ impl<I, E> Reactor<I, E>
 where
     E: Debug,
 {
-    /// Creates a new `Reactor` with the given input.
     pub fn input(input: I) -> Self {
         Self { input: Ok(input) }
     }
 
-    /// Applies a transformation to the current input.
     pub fn then<O, T>(&mut self, transform: T) -> Reactor<O, E>
     where
-        T: ChainableAct<I, O, E>,
+        T: Act<I, O, E>,
     {
         let input = mem::replace(&mut self.input, Err(unsafe { std::mem::zeroed() }));
         Reactor {
@@ -117,7 +100,6 @@ where
         }
     }
 
-    /// Applies one of two transformations based on a condition.
     pub fn if_else<O1, O2, C, T1, T2>(
         &mut self,
         condition: C,
@@ -126,8 +108,8 @@ where
     ) -> Reactor<Either<O1, O2>, E>
     where
         C: Fn(&I) -> bool,
-        T1: ChainableAct<I, O1, E>,
-        T2: ChainableAct<I, O2, E>,
+        T1: Act<I, O1, E>,
+        T2: Act<I, O2, E>,
     {
         let input = mem::replace(&mut self.input, Err(unsafe { std::mem::zeroed() }));
         Reactor {
@@ -141,11 +123,10 @@ where
         }
     }
 
-    /// Applies a transformation to each item in an iterable input.
     pub fn for_each<O, T>(&mut self, transform: T) -> Reactor<Vec<O>, E>
     where
         I: IntoIterator,
-        T: ChainableAct<I::Item, O, E> + Clone,
+        T: Act<I::Item, O, E> + Clone,
     {
         let input = mem::replace(&mut self.input, Err(unsafe { std::mem::zeroed() }));
         Reactor {
@@ -157,7 +138,6 @@ where
         }
     }
 
-    /// Applies a function to the current input.
     pub fn map<O, F>(&mut self, f: F) -> Reactor<O, E>
     where
         F: FnOnce(I) -> O,
@@ -168,7 +148,6 @@ where
         }
     }
 
-    /// Applies a fallible function to the current input.
     pub fn and_then<O, F>(&mut self, f: F) -> Reactor<O, E>
     where
         F: FnOnce(I) -> Result<O, E>,
@@ -179,7 +158,6 @@ where
         }
     }
 
-    /// Merges the first two items of an iterable input using the provided function.
     pub fn merge<O, F>(&mut self, f: F) -> Reactor<O, E>
     where
         I: IntoIterator,
@@ -192,13 +170,12 @@ where
                 let mut iter = i.into_iter();
                 match (iter.next(), iter.next()) {
                     (Some(a), Some(b)) => Ok(f(a, b)),
-                    _ => panic!("Merge operation requires at least two items")
+                    _ => panic!("Merge operation requires at least two items"),
                 }
             }),
         }
     }
 
-    /// Runs the reactor and returns the final result.
     pub fn run(&mut self) -> Out<I, E> {
         mem::replace(&mut self.input, Err(unsafe { std::mem::zeroed() }))
     }
@@ -208,7 +185,6 @@ impl<I, E> TimedReactor<I, E>
 where
     E: Debug,
 {
-    /// Creates a new `TimedReactor` with the given input.
     pub fn input(input: I) -> Self {
         Self {
             reactor: Rc::new(RefCell::new(Reactor::input(input))),
@@ -218,13 +194,11 @@ where
         }
     }
 
-    /// Starts timing for the current operation.
     fn start_timing(&self, operation: &str) {
         *self.current_operation.borrow_mut() = Some(operation.to_string());
         *self.start_time.borrow_mut() = Some(Instant::now());
     }
 
-    /// Ends timing for the current operation and records the duration.
     fn end_timing(&self) {
         if let (Some(operation), Some(start_time)) = (
             self.current_operation.borrow_mut().take(),
@@ -235,7 +209,6 @@ where
         }
     }
 
-    /// Applies a transformation to the current input and records the timing.
     pub fn then<O, T>(self, transform: T) -> TimedReactor<O, E>
     where
         T: Act<I, O, E>,
@@ -251,7 +224,6 @@ where
         }
     }
 
-    /// Applies one of two transformations based on a condition and records the timing.
     pub fn if_else<O1, O2, C, T1, T2>(
         self,
         condition: C,
@@ -264,7 +236,11 @@ where
         T2: Act<I, O2, E>,
     {
         self.start_timing("if_else");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().if_else(condition, true_transform, false_transform)));
+        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().if_else(
+            condition,
+            true_transform,
+            false_transform,
+        )));
         self.end_timing();
         TimedReactor {
             reactor: new_reactor,
@@ -274,7 +250,6 @@ where
         }
     }
 
-    /// Applies a transformation to each item in an iterable input and records the timing.
     pub fn for_each<O, T>(self, transform: T) -> TimedReactor<Vec<O>, E>
     where
         I: IntoIterator,
@@ -291,7 +266,6 @@ where
         }
     }
 
-    /// Applies a function to the current input and records the timing.
     pub fn map<O, F>(self, f: F) -> TimedReactor<O, E>
     where
         F: FnOnce(I) -> O,
@@ -307,7 +281,6 @@ where
         }
     }
 
-    /// Applies a fallible function to the current input and records the timing.
     pub fn and_then<O, F>(self, f: F) -> TimedReactor<O, E>
     where
         F: FnOnce(I) -> Result<O, E>,
@@ -323,7 +296,6 @@ where
         }
     }
 
-    /// Merges the first two items of an iterable input using the provided function and records the timing.
     pub fn merge<O, F>(self, f: F) -> TimedReactor<O, E>
     where
         I: IntoIterator,
@@ -341,52 +313,62 @@ where
         }
     }
 
-    /// Runs the reactor and returns the final result along with the recorded timings.
     pub fn run(self) -> (Out<I, E>, HashMap<String, Duration>) {
-        (self.reactor.borrow_mut().run(), self.timings.borrow().clone())
+        (
+            self.reactor.borrow_mut().run(),
+            self.timings.borrow().clone(),
+        )
     }
 }
 
-/// A generic enum representing various types of failures that can occur in the Reactor pipeline.
 #[derive(Debug)]
 pub enum Failure {
-    /// Represents an invalid input value.
     InvalidInput(String),
-    /// Represents an arithmetic error (e.g., division by zero).
     ArithmeticError(String),
-    /// Represents a custom error with a message.
     Custom(String),
 }
 
-/// Adds one to the input number.
-pub fn add_one(x: i32) -> Out<i32> {
-    Ok(x + 1)
-}
-
-/// Squares the input number, returning an error for negative inputs.
-pub fn square(x: i32) -> Out<i32> {
-    if x < 0 {
-        Err(Failure::InvalidInput("Negative input for square function".to_string()))
-    } else {
-        Ok(x * x)
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Failure::InvalidInput(s) => write!(f, "Invalid input: {}", s),
+            Failure::ArithmeticError(s) => write!(f, "Arithmetic error: {}", s),
+            Failure::Custom(s) => write!(f, "Custom error: {}", s),
+        }
     }
 }
 
-/// Converts the input number to a string.
-pub fn to_string(x: i32) -> Out<String> {
-    Ok(x.to_string())
+// Modified example functions to work with the new implementation
+pub fn add(y: i32) -> impl Fn(i32) -> Out<i32> {
+    move |x| Ok(x + y)
 }
 
-/// Doubles the input number.
-pub fn double(x: i32) -> Out<i32> {
-    Ok(x * 2)
+pub fn square() -> impl Fn(i32) -> Out<i32> {
+    |x| {
+        if x < 0 {
+            Err(Failure::InvalidInput(
+                "Negative input for square function".to_string(),
+            ))
+        } else {
+            Ok(x * x)
+        }
+    }
 }
 
-/// Divides the first number by the second, returning an error for division by zero.
-pub fn divide(x: i32, y: i32) -> Out<i32> {
-    if y == 0 {
-        Err(Failure::ArithmeticError("Division by zero".to_string()))
-    } else {
-        Ok(x / y)
+pub fn to_string() -> impl Fn(i32) -> Out<String> {
+    |x| Ok(x.to_string())
+}
+
+pub fn double() -> impl Fn(i32) -> Out<i32> {
+    |x| Ok(x * 2)
+}
+
+pub fn divide(y: i32) -> impl Fn(i32) -> Out<i32> {
+    move |x| {
+        if y == 0 {
+            Err(Failure::ArithmeticError("Division by zero".to_string()))
+        } else {
+            Ok(x / y)
+        }
     }
 }
