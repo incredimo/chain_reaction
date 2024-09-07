@@ -63,11 +63,11 @@ use std::time::{Duration, Instant};
 /// // 5 -> add(2) -> square() -> to_string() -> double()
 /// // in a type safe and composable way
 ///     let input = 5;
-///     let result = input
-///         .chain_reaction(add(2))
+///     let result = Reactor::input(input)
+///         .then(add(2))
 ///         .then(square())
-///         .then(to_string())
 ///         .then(double())
+///         .then(to_string())
 ///         .run();
 /// }
 /// ```
