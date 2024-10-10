@@ -1,5 +1,6 @@
 #![allow(unused_imports,unused_variables,dead_code, unused_braces, unused_import_braces)]
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Debug};
 use std::marker::PhantomData;
@@ -147,12 +148,7 @@ pub struct Reactor<I, E = Failure> {
     input: Out<I, E>,
 }
 
-pub struct TimedReactor<I, E = Failure> {
-    reactor: Rc<RefCell<Reactor<I, E>>>,
-    timings: Rc<RefCell<HashMap<String, Duration>>>,
-    current_operation: Rc<RefCell<Option<String>>>,
-    start_time: Rc<RefCell<Option<Instant>>>,
-}
+ 
 
 impl<I, E> Reactor<I, E>
 where
@@ -171,6 +167,9 @@ where
             input: input.and_then(|i| transform.act(i)),
         }
     }
+
+
+    
 
     pub fn if_else<O1, O2, C, T1, T2>(
         &mut self,
@@ -252,147 +251,7 @@ where
         mem::replace(&mut self.input, Err(unsafe { std::mem::zeroed() }))
     }
 }
-
-impl<I, E> TimedReactor<I, E>
-where
-    E: Debug,
-{
-    pub fn input(input: I) -> Self {
-        Self {
-            reactor: Rc::new(RefCell::new(Reactor::input(input))),
-            timings: Rc::new(RefCell::new(HashMap::new())),
-            current_operation: Rc::new(RefCell::new(None)),
-            start_time: Rc::new(RefCell::new(None)),
-        }
-    }
-
-    fn start_timing(&self, operation: &str) {
-        *self.current_operation.borrow_mut() = Some(operation.to_string());
-        *self.start_time.borrow_mut() = Some(Instant::now());
-    }
-
-    fn end_timing(&self) {
-        if let (Some(operation), Some(start_time)) = (
-            self.current_operation.borrow_mut().take(),
-            self.start_time.borrow_mut().take(),
-        ) {
-            let duration = start_time.elapsed();
-            self.timings.borrow_mut().insert(operation, duration);
-        }
-    }
-
-    pub fn then<O, T>(self, transform: T) -> TimedReactor<O, E>
-    where
-        T: Act<I, O, E>,
-    {
-        self.start_timing("then");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().then(transform)));
-        self.end_timing();
-        TimedReactor {
-            reactor: new_reactor,
-            timings: Rc::clone(&self.timings),
-            current_operation: Rc::clone(&self.current_operation),
-            start_time: Rc::clone(&self.start_time),
-        }
-    }
-
-    pub fn if_else<O1, O2, C, T1, T2>(
-        self,
-        condition: C,
-        true_transform: T1,
-        false_transform: T2,
-    ) -> TimedReactor<Either<O1, O2>, E>
-    where
-        C: Fn(&I) -> bool,
-        T1: Act<I, O1, E>,
-        T2: Act<I, O2, E>,
-    {
-        self.start_timing("if_else");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().if_else(
-            condition,
-            true_transform,
-            false_transform,
-        )));
-        self.end_timing();
-        TimedReactor {
-            reactor: new_reactor,
-            timings: Rc::clone(&self.timings),
-            current_operation: Rc::clone(&self.current_operation),
-            start_time: Rc::clone(&self.start_time),
-        }
-    }
-
-    pub fn for_each<O, T>(self, transform: T) -> TimedReactor<Vec<O>, E>
-    where
-        I: IntoIterator,
-        T: Act<I::Item, O, E> + Clone,
-    {
-        self.start_timing("for_each");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().for_each(transform)));
-        self.end_timing();
-        TimedReactor {
-            reactor: new_reactor,
-            timings: Rc::clone(&self.timings),
-            current_operation: Rc::clone(&self.current_operation),
-            start_time: Rc::clone(&self.start_time),
-        }
-    }
-
-    pub fn map<O, F>(self, f: F) -> TimedReactor<O, E>
-    where
-        F: FnOnce(I) -> O,
-    {
-        self.start_timing("map");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().map(f)));
-        self.end_timing();
-        TimedReactor {
-            reactor: new_reactor,
-            timings: Rc::clone(&self.timings),
-            current_operation: Rc::clone(&self.current_operation),
-            start_time: Rc::clone(&self.start_time),
-        }
-    }
-
-    pub fn and_then<O, F>(self, f: F) -> TimedReactor<O, E>
-    where
-        F: FnOnce(I) -> Result<O, E>,
-    {
-        self.start_timing("and_then");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().and_then(f)));
-        self.end_timing();
-        TimedReactor {
-            reactor: new_reactor,
-            timings: Rc::clone(&self.timings),
-            current_operation: Rc::clone(&self.current_operation),
-            start_time: Rc::clone(&self.start_time),
-        }
-    }
-
-    pub fn merge<O, F>(self, f: F) -> TimedReactor<O, E>
-    where
-        I: IntoIterator,
-        I::Item: Clone,
-        F: Fn(I::Item, I::Item) -> O,
-    {
-        self.start_timing("merge");
-        let new_reactor = Rc::new(RefCell::new(self.reactor.borrow_mut().merge(f)));
-        self.end_timing();
-        TimedReactor {
-            reactor: new_reactor,
-            timings: Rc::clone(&self.timings),
-            current_operation: Rc::clone(&self.current_operation),
-            start_time: Rc::clone(&self.start_time),
-        }
-    }
-
-    pub fn run(self) -> (Out<I, E>, HashMap<String, Duration>) {
-        (
-            self.reactor.borrow_mut().run(),
-            self.timings.borrow().clone(),
-        )
-    }
-}
-
+ 
 #[derive(Debug)]
 pub enum Failure {
     InvalidInput(String),
@@ -411,6 +270,5 @@ impl std::fmt::Display for Failure {
 }
 
 impl std::error::Error for Failure {}
-
 
 

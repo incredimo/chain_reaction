@@ -1,5 +1,7 @@
  
- use chain_reaction::*;
+ use std::{fs::DirEntry, path::{Path, PathBuf}};
+
+use chain_reaction::*;
  // functions can do anything, as long as they return a Result<T, E>
  pub fn add(y: i32) -> impl Fn(i32) -> Out<i32> {
      move |x| Ok(x + y)
@@ -39,6 +41,10 @@
      }
  }
 
+ pub fn append(y: Vec<i32>) -> impl Fn(Vec<i32>) -> Out<Vec<i32>> {
+     move |x| Ok(x.into_iter().chain(y.clone().into_iter()).collect())
+ }
+
  
  fn main() {
  
@@ -47,12 +53,28 @@
  // in a type safe and composable way
      let input = 5;
      let result = Reactor::input(input)
-         .then(add(2))
+     .then(add(2))
          .then(square())
          .then(double())
          .then(to_string())
          .run();
 
         println!("{:?}", result);
+
+        let input = vec![1, 2, 3, 4, 5];
+        let result = Reactor::input(input)
+        .then(append(vec![55,68]))
+        .for_each(|x : i32| Ok(x.abs()))
+        .run(); 
+
+        println!("{:?}", result);
+
+        //now lets use chain_eractor to extract data from a folder of files
+        let data = Reactor::input(Path::new("."))
+        .then(|x: &Path| x.read_dir())
+        .for_each(|x: Result<DirEntry, std::io::Error>| Ok(x.unwrap())  )
+        .run();
+
+        println!("{:?}", data);
  }
  
